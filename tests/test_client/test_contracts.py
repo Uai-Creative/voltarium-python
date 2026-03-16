@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 
 from voltarium.client import VoltariumClient
@@ -67,8 +69,6 @@ async def test_contracts_full_lifecycle_integration(
     assert contract_file.content_base64
     assert contract_file.content
     assert contract_file.content_length
-    import base64
-
     assert contract_file.content_length == len(base64.b64decode(contract_file.content_base64))
 
 
