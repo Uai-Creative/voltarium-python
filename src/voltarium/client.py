@@ -15,7 +15,6 @@ from voltarium.exceptions import (
     NotFoundError,
     RateLimitError,
     ValidationError,
-    VoltariumError,
 )
 from voltarium.models import (
     ApiHeaders,

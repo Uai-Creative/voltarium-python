@@ -44,14 +44,14 @@ class TestGenerateConsumerUnitCode:
         # Re-validate N2
         digits = [int(d) for d in code[:13]]
         weights_n2 = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 10, 9, 8]
-        remainder = sum(d * w for d, w in zip(digits, weights_n2)) % 11
+        remainder = sum(d * w for d, w in zip(digits, weights_n2, strict=True)) % 11
         expected_n2 = 0 if remainder < 2 else 11 - remainder
         assert int(code[13]) == expected_n2
 
         # Re-validate N1
         digits_14 = [int(d) for d in code[:14]]
         weights_n1 = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 10, 9, 8]
-        remainder = sum(d * w for d, w in zip(digits_14, weights_n1)) % 11
+        remainder = sum(d * w for d, w in zip(digits_14, weights_n1, strict=True)) % 11
         expected_n1 = 0 if remainder < 2 else 11 - remainder
         assert int(code[14]) == expected_n1
 
