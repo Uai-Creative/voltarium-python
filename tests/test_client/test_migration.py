@@ -1,10 +1,11 @@
 import asyncio
+import random
 from datetime import timedelta
 
 from voltarium.client import VoltariumClient
 from voltarium.factories import CreateMigrationRequestFactory, UpdateMigrationRequestFactory
 from voltarium.models import MigrationItem, MigrationListItem
-from voltarium.sandbox import SandboxAgentCredentials
+from voltarium.sandbox import SandboxAgentCredentials, generate_consumer_unit_code
 
 
 async def test_migration_full_lifecycle_integration(
@@ -108,3 +109,79 @@ async def test_migration_full_lifecycle_integration(
 
     for migration in retrieved_migrations:
         assert isinstance(migration, MigrationListItem)
+
+
+async def test_list_migrations_consumer_unit_filter(
+    client: VoltariumClient,
+    retailer: SandboxAgentCredentials,
+    utility: SandboxAgentCredentials,
+) -> None:
+    """Regression: list_migrations must honour the consumer_unit_code filter.
+
+    Previously, ListMigrationsParams used serialization_alias="codigoUC" which
+    CCEE silently ignored, returning ALL migrations for the agent regardless of
+    the requested UC. The correct alias is "codigoUnidadeConsumidora".
+
+    Failure mode: if the filter is broken, both migration IDs appear in both
+    result sets instead of each UC returning only its own migration.
+    """
+    profile_id = retailer.profiles[0]
+
+    suffix_a = random.randint(10_000_000, 99_999_999)
+    suffix_b = random.randint(10_000_000, 99_999_999)
+    uc_a = generate_consumer_unit_code(f"{utility.agent_code}{suffix_a}")
+    uc_b = generate_consumer_unit_code(f"{utility.agent_code}{suffix_b}")
+
+    migration_a = await client.create_migration(
+        migration_data=CreateMigrationRequestFactory.build(
+            retailer_agent_code=retailer.agent_code,
+            retailer_profile_code=profile_id,
+            utility_agent_code=utility.agent_code,
+            consumer_unit_code=uc_a,
+        ),
+        agent_code=retailer.agent_code,
+        profile_code=profile_id,
+    )
+    migration_b = await client.create_migration(
+        migration_data=CreateMigrationRequestFactory.build(
+            retailer_agent_code=retailer.agent_code,
+            retailer_profile_code=profile_id,
+            utility_agent_code=utility.agent_code,
+            consumer_unit_code=uc_b,
+        ),
+        agent_code=retailer.agent_code,
+        profile_code=profile_id,
+    )
+
+    # Build a 12-month window covering the created migrations' reference months
+    earliest = min(migration_a.reference_month, migration_b.reference_month)
+    latest = max(migration_a.reference_month, migration_b.reference_month)
+    initial_month = earliest.strftime("%Y-%m")
+    final_month = latest.strftime("%Y-%m")
+
+    ids_a = {
+        m.migration_id
+        async for m in client.list_migrations(
+            initial_reference_month=initial_month,
+            final_reference_month=final_month,
+            agent_code=retailer.agent_code,
+            profile_code=profile_id,
+            consumer_unit_code=uc_a,
+        )
+    }
+    ids_b = {
+        m.migration_id
+        async for m in client.list_migrations(
+            initial_reference_month=initial_month,
+            final_reference_month=final_month,
+            agent_code=retailer.agent_code,
+            profile_code=profile_id,
+            consumer_unit_code=uc_b,
+        )
+    }
+
+    assert migration_a.migration_id in ids_a, "Migration for UC A not returned when filtering by UC A"
+    assert migration_b.migration_id not in ids_a, "Migration for UC B leaked into UC A results (filter broken)"
+
+    assert migration_b.migration_id in ids_b, "Migration for UC B not returned when filtering by UC B"
+    assert migration_a.migration_id not in ids_b, "Migration for UC A leaked into UC B results (filter broken)"

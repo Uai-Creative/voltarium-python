@@ -25,7 +25,7 @@ class ListMigrationsParams(BaseModel):
     )
     retailer_profile_code: str = Field(serialization_alias="codigoPerfilVarejista", description="Retailer profile code")
     consumer_unit_code: str | None = Field(
-        default=None, serialization_alias="codigoUC", description="Consumer unit code filter"
+        default=None, serialization_alias="codigoUnidadeConsumidora", description="Consumer unit code filter"
     )
     migration_status: str | None = Field(
         default=None, serialization_alias="statusMigracao", description="Migration status filter"
@@ -51,7 +51,7 @@ class ListContractsParams(BaseModel):
         default=None, serialization_alias="codigoAgenteConcessionaria", description="Utility agent code filter"
     )
     consumer_unit_code: str | None = Field(
-        default=None, serialization_alias="codigoUC", description="Consumer unit code filter"
+        default=None, serialization_alias="codigoUnidadeConsumidora", description="Consumer unit code filter"
     )
     contract_status: str | None = Field(
         default=None, serialization_alias="statusContrato", description="Contract status filter"
