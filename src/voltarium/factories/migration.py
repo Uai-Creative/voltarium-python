@@ -55,9 +55,9 @@ class BaseMigrationFactory(factory.Factory):
     @factory.lazy_attribute
     def document_number(obj: Any) -> str | None:
         doc_type = getattr(obj, "document_type", None)
-        if doc_type == "CPF":  # type: ignore[attr-defined]
+        if doc_type == "CPF":
             return fake_br.cpf().replace(".", "").replace("-", "")
-        if doc_type == "CNPJ":  # type: ignore[attr-defined]
+        if doc_type == "CNPJ":
             return fake_br.cnpj().replace(".", "").replace("/", "").replace("-", "")
         return None
 
@@ -84,13 +84,13 @@ class MigrationListItemFactory(BaseMigrationFactory):
     # MigrationListItem specific fields
     supplier_agent_code = factory.Faker("pyint", min_value=1000, max_value=9999)
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def reference_month(obj: Any) -> datetime:
         # Generate a future month (1-3 months ahead)
         future_date = datetime.now() + timedelta(days=random.randint(30, 90))
         return future_date.replace(day=1)  # First day of the month
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def denunciation_date(obj: Any) -> datetime:
         # Generate a future date (1-2 months ahead)
         return datetime.now() + timedelta(days=random.randint(30, 60))
@@ -105,13 +105,13 @@ class MigrationItemFactory(BaseMigrationFactory):
         model = MigrationItem
 
     # MigrationItem specific fields
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def reference_date(obj: Any) -> datetime:
         # Generate a future month (1-3 months ahead)
         future_date = datetime.now() + timedelta(days=random.randint(30, 90))
         return future_date.replace(day=1)  # First day of the month
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def denunciation_date(obj: Any) -> datetime:
         # Generate a future date (1-2 months ahead), optional for detail context
         return datetime.now() + timedelta(days=random.randint(30, 60))
@@ -120,25 +120,25 @@ class MigrationItemFactory(BaseMigrationFactory):
     supplier_code = factory.Faker("pyint", min_value=1000, max_value=9999)
 
 
-class CreateMigrationRequestFactory(factory.Factory):  # type: ignore
+class CreateMigrationRequestFactory(factory.Factory):
     """Factory for CreateMigrationRequest model."""
 
     class Meta:
         model = CreateMigrationRequest
 
     class Params:
-        sandbox_agent_credentials = FuzzyChoice(RETAILERS)  # type: ignore
+        sandbox_agent_credentials = FuzzyChoice(RETAILERS)
 
     # Generate real agent credentials for testing
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def retailer_agent_code(obj: Any) -> int:
         return obj.sandbox_agent_credentials.agent_code
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def retailer_profile_code(obj: Any) -> int:
         return random.choice(obj.sandbox_agent_credentials.profiles)
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def utility_agent_code(obj: Any) -> int:
         utility = random.choice(UTILITIES)
         return utility.agent_code
@@ -146,21 +146,21 @@ class CreateMigrationRequestFactory(factory.Factory):  # type: ignore
     consumer_unit_code = factory.LazyAttribute(
         lambda obj: generate_consumer_unit_code(f"{obj.utility_agent_code}{random.randint(1000, 9999)}")
     )
-    document_type = FuzzyChoice(["CNPJ", "CPF"])  # type: ignore
+    document_type = FuzzyChoice(["CNPJ", "CPF"])
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def document_number(obj: Any) -> str | None:
         if obj.document_type == "CPF":
             return None
         return fake_br.cnpj().replace(".", "").replace("/", "").replace("-", "")
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def reference_month(obj: Any) -> str:
         # Generate a future month (1-3 months ahead) in YYYY-MM format
         future_date = datetime.now() + timedelta(days=random.randint(30, 90))
         return future_date.strftime("%Y-%m")
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def denunciation_date(obj: Any) -> str:
         # Generate a future date (1-2 months ahead) in YYYY-MM-DD format
         future_date = datetime.now() + timedelta(days=random.randint(30, 60))
@@ -170,29 +170,29 @@ class CreateMigrationRequestFactory(factory.Factory):  # type: ignore
     comment = factory.Faker("text", max_nb_chars=500)
 
 
-class UpdateMigrationRequestFactory(factory.Factory):  # type: ignore
+class UpdateMigrationRequestFactory(factory.Factory):
     """Factory for UpdateMigrationRequest model."""
 
     class Meta:
         model = UpdateMigrationRequest
 
     class Params:
-        sandbox_agent_credentials = FuzzyChoice(RETAILERS)  # type: ignore
+        sandbox_agent_credentials = FuzzyChoice(RETAILERS)
 
     # Generate real agent credentials for testing
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def retailer_profile_code(obj: Any) -> int:
         return random.choice(obj.sandbox_agent_credentials.profiles)
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def reference_month(obj: Any) -> str:
         # Generate a future month (1-3 months ahead) in YYYY-MM format
         future_date = datetime.now() + timedelta(days=random.randint(30, 90))
         return future_date.strftime("%Y-%m")
 
-    document_type = FuzzyChoice(["CNPJ", "CPF"])  # type: ignore
+    document_type = FuzzyChoice(["CNPJ", "CPF"])
 
-    @factory.lazy_attribute  # type: ignore
+    @factory.lazy_attribute
     def document_number(obj: Any) -> str | None:
         if obj.document_type == "CPF":
             return None

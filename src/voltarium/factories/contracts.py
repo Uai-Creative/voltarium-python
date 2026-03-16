@@ -11,15 +11,15 @@ from voltarium.models import CreateContractRequest, LegalRepresentativeWrite
 from voltarium.sandbox import RETAILERS, UTILITIES, generate_consumer_unit_code
 
 
-class CreateContractRequestFactory(factory.Factory):  # type: ignore
+class CreateContractRequestFactory(factory.Factory):
     """Factory for CreateContractRequest using sandbox data."""
 
     class Meta:
         model = CreateContractRequest
 
     class Params:
-        sandbox_retailer = FuzzyChoice(RETAILERS)  # type: ignore
-        sandbox_utility = FuzzyChoice(UTILITIES)  # type: ignore
+        sandbox_retailer = FuzzyChoice(RETAILERS)
+        sandbox_utility = FuzzyChoice(UTILITIES)
 
     utility_agent_code = factory.LazyAttribute(lambda obj: obj.sandbox_utility.agent_code)
     consumer_unit_code = factory.LazyAttribute(
