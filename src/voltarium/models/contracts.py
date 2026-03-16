@@ -107,7 +107,7 @@ class ContractFile(BaseModel):
     @computed_field(return_type=int)
     def content_length(self) -> int:
         """Return the size of the decoded payload in bytes."""
-        return len(self.content)
+        return len(base64.b64decode(self.content_base64))
 
 
 class CreateContractRequest(BaseModel):
