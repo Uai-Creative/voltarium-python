@@ -62,6 +62,40 @@ def _split_datetime_range_by_month(start_str: str, end_str: str) -> list[tuple[s
     return ranges
 
 
+def _split_month_range(initial_month: str, final_month: str, max_months: int = 12) -> list[tuple[str, str]]:
+    """Split a YYYY-MM range into chunks of at most *max_months* months.
+
+    CCEE's migrations and contracts endpoints reject requests whose date range
+    exceeds 12 months (ERR_MES_REFERENCIA_INICIAL_DIFERENCA).  This helper
+    transparently chunks the caller's range so the client can issue multiple
+    requests without the caller needing to know about the limit.
+    """
+    from datetime import date  # noqa: PLC0415
+
+    def _parse(s: str) -> date:
+        y, m = map(int, s.split("-"))
+        return date(y, m, 1)
+
+    def _add_months(d: date, n: int) -> date:
+        """Advance a first-of-month date by n months."""
+        result = d
+        for _ in range(n):
+            result = (result.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return result
+
+    start = _parse(initial_month)
+    end = _parse(final_month)
+
+    ranges: list[tuple[str, str]] = []
+    cur = start
+    while cur <= end:
+        window_end = min(_add_months(cur, max_months - 1), end)
+        ranges.append((cur.strftime("%Y-%m"), window_end.strftime("%Y-%m")))
+        cur = _add_months(window_end, 1)
+
+    return ranges
+
+
 class VoltariumClient:
     """Asynchronous client for CCEE API."""
 
@@ -254,49 +288,40 @@ class VoltariumClient:
         Returns:
             AsyncGenerator of migrations
         """
-        # Create headers model
         headers_model = ApiHeaders(
             agent_code=str(agent_code),
             profile_code=str(profile_code),
         )
 
-        # Create parameters model
-        params_model = ListMigrationsParams(
-            initial_reference_month=initial_reference_month,
-            final_reference_month=final_reference_month,
-            retailer_profile_code=str(profile_code),
-            consumer_unit_code=consumer_unit_code,
-            migration_status=migration_status,
-        )
-
-        async def _get_page(page_index: str | None = None) -> Response:
-            # Update the page index if provided
-            if page_index is not None:
-                params_model.next_page_index = page_index
-            else:
-                params_model.next_page_index = None
-
-            return await self._request(
-                method="GET",
-                path="/v1/varejista/migracoes",
-                headers=headers_model.model_dump(by_alias=True),
-                params=params_model.model_dump(by_alias=True, exclude_none=True),
+        for window_start, window_end in _split_month_range(initial_reference_month, final_reference_month):
+            params_model = ListMigrationsParams(
+                initial_reference_month=window_start,
+                final_reference_month=window_end,
+                retailer_profile_code=str(profile_code),
+                consumer_unit_code=consumer_unit_code,
+                migration_status=migration_status,
             )
 
-        # Handle pagination
-        page_index = None
-        while True:
-            response = await _get_page(page_index)
-            data = response.json()
+            async def _get_page(page_index: str | None = None, _params=params_model) -> Response:
+                _params.next_page_index = page_index
+                return await self._request(
+                    method="GET",
+                    path="/v1/varejista/migracoes",
+                    headers=headers_model.model_dump(by_alias=True),
+                    params=_params.model_dump(by_alias=True, exclude_none=True),
+                )
 
-            # Yield migrations from current page
-            for migration_data in data.get("migracao", []):
-                yield MigrationListItem.model_validate(migration_data)
+            page_index = None
+            while True:
+                response = await _get_page(page_index)
+                data = response.json()
 
-            # Check if there are more pages
-            page_index = data.get("indexProximaPagina")
-            if page_index is None:
-                break
+                for migration_data in data.get("migracao", []):
+                    yield MigrationListItem.model_validate(migration_data)
+
+                page_index = data.get("indexProximaPagina")
+                if page_index is None:
+                    break
 
     async def create_migration(
         self,
@@ -447,35 +472,32 @@ class VoltariumClient:
             profile_code=str(profile_code),
         )
 
-        params_model = ListContractsParams(
-            initial_reference_month=initial_reference_month,
-            final_reference_month=final_reference_month,
-            retailer_profile_code=str(profile_code),
-            utility_agent_code=str(utility_agent_code) if utility_agent_code is not None else None,
-            consumer_unit_code=consumer_unit_code,
-            contract_status=contract_status,
-        )
-
-        async def _get_page(page_index: str | None = None) -> Response:
-            if page_index is not None:
-                params_model.next_page_index = page_index
-            else:
-                params_model.next_page_index = None
-
-            return await self._request(
-                method="GET",
-                path="/v1/varejista/contratos",
-                headers=headers_model.model_dump(by_alias=True),
-                params=params_model.model_dump(by_alias=True, exclude_none=True),
+        for window_start, window_end in _split_month_range(initial_reference_month, final_reference_month):
+            params_model = ListContractsParams(
+                initial_reference_month=window_start,
+                final_reference_month=window_end,
+                retailer_profile_code=str(profile_code),
+                utility_agent_code=str(utility_agent_code) if utility_agent_code is not None else None,
+                consumer_unit_code=consumer_unit_code,
+                contract_status=contract_status,
             )
 
-        page_index = None
-        while True:
-            response = await _get_page(page_index)
-            data = response.json()
+            async def _get_page(page_index: str | None = None, _params=params_model) -> Response:
+                _params.next_page_index = page_index
+                return await self._request(
+                    method="GET",
+                    path="/v1/varejista/contratos",
+                    headers=headers_model.model_dump(by_alias=True),
+                    params=_params.model_dump(by_alias=True, exclude_none=True),
+                )
 
-            for contract_data in data.get("contratos", data.get("contrato", [])):
-                yield Contract.model_validate(contract_data)
+            page_index = None
+            while True:
+                response = await _get_page(page_index)
+                data = response.json()
+
+                for contract_data in data.get("contratos", data.get("contrato", [])):
+                    yield Contract.model_validate(contract_data)
 
             page_index = data.get("indexProximaPagina")
             if page_index is None:
