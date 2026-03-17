@@ -1,5 +1,7 @@
 """Unit tests for client-level helper functions."""
 
+import pytest
+
 from voltarium.client import _split_month_range
 
 
@@ -47,3 +49,13 @@ def test_year_boundary():
 def test_year_boundary_exceeds_12():
     result = _split_month_range("2023-07", "2024-07")
     assert result == [("2023-07", "2024-06"), ("2024-07", "2024-07")]
+
+
+def test_inverted_range_raises():
+    with pytest.raises(ValueError, match="initial_month"):
+        _split_month_range("2024-06", "2024-01")
+
+
+def test_invalid_max_months_raises():
+    with pytest.raises(ValueError, match="max_months"):
+        _split_month_range("2024-01", "2024-12", max_months=0)

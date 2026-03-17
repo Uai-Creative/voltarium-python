@@ -69,7 +69,13 @@ def _split_month_range(initial_month: str, final_month: str, max_months: int = 1
     exceeds 12 months (ERR_MES_REFERENCIA_INICIAL_DIFERENCA).  This helper
     transparently chunks the caller's range so the client can issue multiple
     requests without the caller needing to know about the limit.
+
+    Raises:
+        ValueError: if max_months < 1 or initial_month is after final_month.
     """
+    if max_months < 1:
+        raise ValueError(f"max_months must be >= 1, got {max_months}")
+
     from datetime import date  # noqa: PLC0415
 
     def _parse(s: str) -> date:
@@ -85,6 +91,9 @@ def _split_month_range(initial_month: str, final_month: str, max_months: int = 1
 
     start = _parse(initial_month)
     end = _parse(final_month)
+
+    if start > end:
+        raise ValueError(f"initial_month ({initial_month}) must be <= final_month ({final_month})")
 
     ranges: list[tuple[str, str]] = []
     cur = start
@@ -499,9 +508,9 @@ class VoltariumClient:
                 for contract_data in data.get("contratos", data.get("contrato", [])):
                     yield Contract.model_validate(contract_data)
 
-            page_index = data.get("indexProximaPagina")
-            if page_index is None:
-                break
+                page_index = data.get("indexProximaPagina")
+                if page_index is None:
+                    break
 
     async def get_contract(
         self,
