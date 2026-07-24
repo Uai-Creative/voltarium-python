@@ -48,7 +48,10 @@ class BaseMigrationFactory(factory.Factory):
     # Required fields
     migration_id = factory.Faker("uuid4")
     consumer_unit_code = factory.LazyAttribute(
-        lambda obj: generate_consumer_unit_code(f"{obj.utility_agent_code}{random.randint(1000, 9999)}")
+        # Wide (7-digit) suffix range: the shared CCEE sandbox accumulates consumer units
+        # across every dev/CI run, so a narrow range (e.g. 1000-9999) collides with
+        # previously-created active migrations often enough to make tests flaky.
+        lambda obj: generate_consumer_unit_code(f"{obj.utility_agent_code}{random.randint(1_000_000, 9_999_999)}")
     )
     utility_agent_consumer_unit_code = factory.Faker("numerify", text="###")
     document_type = factory.Faker("random_element", elements=("CPF", "CNPJ"))
@@ -158,7 +161,10 @@ class CreateMigrationRequestFactory(factory.Factory):
         return utility.agent_code
 
     consumer_unit_code = factory.LazyAttribute(
-        lambda obj: generate_consumer_unit_code(f"{obj.utility_agent_code}{random.randint(1000, 9999)}")
+        # Wide (7-digit) suffix range: the shared CCEE sandbox accumulates consumer units
+        # across every dev/CI run, so a narrow range (e.g. 1000-9999) collides with
+        # previously-created active migrations often enough to make tests flaky.
+        lambda obj: generate_consumer_unit_code(f"{obj.utility_agent_code}{random.randint(1_000_000, 9_999_999)}")
     )
     document_type = FuzzyChoice(["CNPJ", "CPF"])
 
@@ -208,7 +214,10 @@ class CreateMigrationRequestV2Factory(factory.Factory):
         return utility.agent_code
 
     consumer_unit_code = factory.LazyAttribute(
-        lambda obj: generate_consumer_unit_code(f"{obj.utility_agent_code}{random.randint(1000, 9999)}")
+        # Wide (7-digit) suffix range: the shared CCEE sandbox accumulates consumer units
+        # across every dev/CI run, so a narrow range (e.g. 1000-9999) collides with
+        # previously-created active migrations often enough to make tests flaky.
+        lambda obj: generate_consumer_unit_code(f"{obj.utility_agent_code}{random.randint(1_000_000, 9_999_999)}")
     )
     document_type = FuzzyChoice(["CNPJ", "CPF"])
 
