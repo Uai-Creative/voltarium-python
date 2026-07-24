@@ -4,7 +4,12 @@ This package provides an asynchronous Python client for the CCEE
 (Brazilian Electric Energy Commercialization Chamber) API.
 """
 
-from voltarium.client import PRODUCTION_BASE_URL, SANDBOX_BASE_URL, VoltariumClient
+from voltarium.client import (
+    PRODUCTION_BASE_URL,
+    SANDBOX_BASE_URL,
+    MigrationApiVersion,
+    VoltariumClient,
+)
 from voltarium.exceptions import (
     AuthenticationError,
     NotFoundError,
@@ -17,6 +22,7 @@ from voltarium.models import (
     Contract,
     CreateContractRequest,
     CreateMigrationRequest,
+    CreateMigrationRequestV2,
     ListContractsParams,
     ListMigrationsParams,
     MigrationItem,
@@ -31,10 +37,12 @@ __all__ = [
     "VoltariumClient",
     "PRODUCTION_BASE_URL",
     "SANDBOX_BASE_URL",
+    "MigrationApiVersion",
     # Models
     "Contract",
     "CreateContractRequest",
     "CreateMigrationRequest",
+    "CreateMigrationRequestV2",
     "ListContractsParams",
     "ListMigrationsParams",
     "MigrationItem",

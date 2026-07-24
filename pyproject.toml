@@ -1,6 +1,6 @@
 [project]
 name = "voltarium"
-version = "0.5.5"
+version = "1.0.0"
 description = "Asynchronous Python client for CCEE (Brazilian Electric Energy Commercialization Chamber) API"
 authors = [
     { name = "joaodaher", email = "joao@daher.dev" }
