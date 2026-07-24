@@ -4,7 +4,7 @@ import time
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import httpx
 from httpx import Response
@@ -22,6 +22,7 @@ from voltarium.models import (
     ContractFile,
     CreateContractRequest,
     CreateMigrationRequest,
+    CreateMigrationRequestV2,
     ListContractsParams,
     ListMeasurementsParams,
     ListMigrationsParams,
@@ -34,6 +35,21 @@ from voltarium.models import (
 
 PRODUCTION_BASE_URL = "https://api-abm.ccee.org.br"
 SANDBOX_BASE_URL = "https://sandbox-api-abm.ccee.org.br"
+
+# The three CCEE migrations API generations this client understands. Kept as a closed
+# Literal (not a bare str) so IDEs/type checkers surface the exact choices and reject typos.
+MigrationApiVersion = Literal["v1", "v1.1", "v2"]
+
+# Which migrations operations exist at each API version, per the CCEE Postman collection.
+# V1.1 has no distinct edit endpoint; neither V1.1 nor V2 documents a delete endpoint.
+_MIGRATION_ENDPOINT_VERSIONS: dict[str, tuple[MigrationApiVersion, ...]] = {
+    "list": ("v1", "v1.1", "v2"),
+    "create": ("v1", "v1.1", "v2"),
+    "get": ("v1", "v1.1", "v2"),
+    "update": ("v1", "v2"),
+    "delete": ("v1",),
+}
+_MIGRATION_VERSION_ORDER: tuple[MigrationApiVersion, ...] = ("v2", "v1.1", "v1")
 
 
 def _split_datetime_range_by_month(start_str: str, end_str: str) -> list[tuple[str, str]]:
@@ -114,6 +130,7 @@ class VoltariumClient:
         client_id: str,
         client_secret: str,
         base_url: str = PRODUCTION_BASE_URL,
+        api_version: MigrationApiVersion = "v2",
         timeout: float = 30.0,
         max_retries: int = 3,
     ) -> None:
@@ -123,6 +140,11 @@ class VoltariumClient:
             base_url: Base URL for the API
             client_id: OAuth2 client ID
             client_secret: OAuth2 client secret
+            api_version: CCEE migrations API generation to target ("v1", "v1.1", or "v2").
+                Defaults to "v2" (the latest). Operations without an endpoint at the
+                configured version transparently fall back to the closest older version
+                that has one (see `_MIGRATION_ENDPOINT_VERSIONS`). Pass "v1" to keep the
+                pre-2.0 behavior of this client.
             timeout: Request timeout in seconds
             max_retries: Maximum number of retries for failed requests
         """
@@ -130,6 +152,7 @@ class VoltariumClient:
         self.base_url = base_url.rstrip("/")
         self.client_id = client_id
         self.client_secret = client_secret
+        self.api_version = api_version
         self.timeout = timeout
         self.max_retries = max_retries
 
@@ -140,6 +163,19 @@ class VoltariumClient:
             follow_redirects=True,
         )
         self._token: Token | None = None
+
+    def _resolve_migration_version(self, operation: str) -> MigrationApiVersion:
+        """Resolve the actual API version to use for a migrations operation.
+
+        Falls back from `self.api_version` toward "v1" until it finds a version that
+        actually has an endpoint for this operation.
+        """
+        supported = _MIGRATION_ENDPOINT_VERSIONS[operation]
+        start = _MIGRATION_VERSION_ORDER.index(self.api_version)
+        for candidate in _MIGRATION_VERSION_ORDER[start:]:
+            if candidate in supported:
+                return candidate
+        return "v1"  # unreachable in practice: v1 supports every operation
 
     async def _refresh_token(self) -> None:
         """Get access token, refreshing if needed."""
@@ -301,6 +337,7 @@ class VoltariumClient:
             agent_code=str(agent_code),
             profile_code=str(profile_code),
         )
+        version = self._resolve_migration_version("list")
 
         for window_start, window_end in _split_month_range(initial_reference_month, final_reference_month):
             params_model = ListMigrationsParams(
@@ -315,7 +352,7 @@ class VoltariumClient:
                 _params.next_page_index = page_index
                 return await self._request(
                     method="GET",
-                    path="/v1/varejista/migracoes",
+                    path=f"/{version}/varejista/migracoes",
                     headers=headers_model.model_dump(by_alias=True),
                     params=_params.model_dump(by_alias=True, exclude_none=True),
                 )
@@ -334,32 +371,49 @@ class VoltariumClient:
 
     async def create_migration(
         self,
-        migration_data: CreateMigrationRequest,
+        migration_data: CreateMigrationRequest | CreateMigrationRequestV2,
         agent_code: str | int,
         profile_code: str | int,
     ) -> MigrationItem:
         """Create a new migration.
 
         Args:
-            migration_data: Migration data
+            migration_data: Migration data. Must be a `CreateMigrationRequestV2` when this
+                client resolves to API version "v2" for the create operation, or a
+                `CreateMigrationRequest` otherwise (v1/v1.1 share the same request shape).
             agent_code: Agent code
             profile_code: Profile code
 
         Returns:
             Created migration
+
+        Raises:
+            TypeError: If migration_data's type doesn't match the resolved API version.
         """
         # Create headers model
         headers_model = ApiHeaders(
             agent_code=str(agent_code),
             profile_code=str(profile_code),
         )
+        version = self._resolve_migration_version("create")
+
+        if version == "v2" and not isinstance(migration_data, CreateMigrationRequestV2):
+            raise TypeError(
+                "api_version resolved to 'v2' for create_migration; migration_data must be a "
+                "CreateMigrationRequestV2 instance."
+            )
+        if version != "v2" and not isinstance(migration_data, CreateMigrationRequest):
+            raise TypeError(
+                f"api_version resolved to {version!r} for create_migration; migration_data must be a "
+                "CreateMigrationRequest instance."
+            )
 
         # Use model_dump with by_alias=True to get Portuguese field names for the API
         json_data = migration_data.model_dump(by_alias=True, exclude_none=True)
 
         response = await self._request(
             method="POST",
-            path="/v1/varejista/migracoes",
+            path=f"/{version}/varejista/migracoes",
             headers=headers_model.model_dump(by_alias=True),
             json=json_data,
         )
@@ -387,10 +441,11 @@ class VoltariumClient:
             agent_code=str(agent_code),
             profile_code=str(profile_code),
         )
+        version = self._resolve_migration_version("get")
 
         response = await self._request(
             method="GET",
-            path=f"/v1/varejista/migracoes/{migration_id}",
+            path=f"/{version}/varejista/migracoes/{migration_id}",
             headers=headers_model.model_dump(by_alias=True),
         )
 
@@ -422,13 +477,14 @@ class VoltariumClient:
             agent_code=str(agent_code),
             profile_code=str(profile_code),
         )
+        version = self._resolve_migration_version("update")
 
         # Use model_dump with by_alias=True to get Portuguese field names for the API
         json_data = migration_data.model_dump(by_alias=True, exclude_none=True)
 
         response = await self._request(
             method="PUT",
-            path=f"/v1/varejista/migracoes/{migration_id}",
+            path=f"/{version}/varejista/migracoes/{migration_id}",
             headers=headers_model.model_dump(by_alias=True),
             json=json_data,
         )
@@ -453,10 +509,11 @@ class VoltariumClient:
             agent_code=str(agent_code),
             profile_code=str(profile_code),
         )
+        version = self._resolve_migration_version("delete")
 
         await self._request(
             method="DELETE",
-            path=f"/v1/varejista/migracoes/{migration_id}",
+            path=f"/{version}/varejista/migracoes/{migration_id}",
             headers=headers_model.model_dump(by_alias=True),
         )
 

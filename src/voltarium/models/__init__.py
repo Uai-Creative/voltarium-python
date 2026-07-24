@@ -12,6 +12,7 @@ from .measurements import Measurement
 from .migration import (
     BaseMigration,
     CreateMigrationRequest,
+    CreateMigrationRequestV2,
     MigrationItem,
     MigrationListItem,
     UpdateMigrationRequest,
@@ -31,6 +32,7 @@ __all__ = [
     "ContractFile",
     "CreateContractRequest",
     "CreateMigrationRequest",
+    "CreateMigrationRequestV2",
     "LegalRepresentative",
     "LegalRepresentativeWrite",
     "ListContractsParams",

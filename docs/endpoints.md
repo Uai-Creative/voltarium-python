@@ -17,6 +17,7 @@ def __init__(
     base_url: str,
     client_id: str,
     client_secret: str,
+    api_version: Literal["v1", "v1.1", "v2"] = "v2",
     timeout: float = 30.0,
     max_retries: int = 3,
 ) -> None:
@@ -27,6 +28,8 @@ def __init__(
 - `base_url` (str): Base URL for the API
 - `client_id` (str): OAuth2 client ID
 - `client_secret` (str): OAuth2 client secret
+- `api_version` (`Literal["v1", "v1.1", "v2"]`, optional): CCEE migrations API generation to
+  target. Defaults to `"v2"` (the latest). See [API Versioning](#api-versioning-migrations) below.
 - `timeout` (float, optional): Request timeout in seconds. Defaults to 30.0
 - `max_retries` (int, optional): Maximum number of retries for failed requests. Defaults to 3
 
@@ -51,19 +54,67 @@ async with VoltariumClient(...) as client:
     pass
 ```
 
+## API Versioning (Migrations)
+
+CCEE's migrations API has three generations: `"v1"`, `"v1.1"`, and `"v2"`. Only the migrations
+endpoints (create/list/get/update/delete) are versioned — contracts and measurements are always
+`v1`. Pick a version once, at construction time, via `api_version`:
+
+```python
+client = VoltariumClient(..., api_version="v2")   # default
+client = VoltariumClient(..., api_version="v1.1")
+client = VoltariumClient(..., api_version="v1")    # pre-2.0 behavior
+```
+
+**`api_version` defaults to `"v2"` as of 2.0 — this is a breaking change from 1.x, which only
+supported `v1`.** Pass `api_version="v1"` to keep the old behavior.
+
+Not every operation has an endpoint at every version. Calls transparently fall back to the closest
+older version that does have one:
+
+| Operation | v1 | v1.1 | v2 |
+|-----------|----|----|----|
+| List | ✅ | ✅ | ✅ |
+| Create | ✅ | ✅ (same body as v1) | ✅ (`CreateMigrationRequestV2`) |
+| Get | ✅ | ✅ | ✅ |
+| Update | ✅ | falls back to v1 | ✅ (same body as v1) |
+| Delete | ✅ | falls back to v1 | falls back to v1 |
+
+**V1 → V1.1**: no request-shape change. Makes the standardized consumer-unit code mandatory and
+adds response-only fields (`process_siga_indicator`, on both `MigrationListItem` and `MigrationItem`).
+
+**V1 → V2 (CP7 rules)**: the create request shape changes — `denunciation_date` is removed and
+replaced by a required `utility_formalized` (`formalizacaoDistribuidora`, `"SIM"` or `"NAO"`) plus a
+required `consumer_unit_tariff_subgroup` (`subGrupoTarifarioUnidadeConsumidora`). Two more fields are
+conditionally required based on `utility_formalized`:
+
+- `formalization_date` (`dataFormalizacao`) — required when `utility_formalized="SIM"`, must be
+  omitted otherwise.
+- `migration_modality` (`modalidadeMigracao`, `"REGULAR"` or `"ANTECIPADA"`) — required when
+  `utility_formalized="NAO"`, must be omitted otherwise.
+
+Because the shape genuinely differs, V2 creates use a separate `CreateMigrationRequestV2` model
+(see [Create Migration (V2)](#create-migration-v2) below) instead of `CreateMigrationRequest`.
+`create_migration` raises `TypeError` if you pass the wrong model for the client's resolved version.
+Responses also gain `protocol_number`, `intended_utility_month`, `formalization_date`,
+`migration_modality`, `consumer_unit_tariff_subgroup`, and `utility_formalized`.
+
 ## Migration Endpoints (🇧🇷 Migracoes)
 
 The migration endpoints provide full CRUD (Create, Read, Update, Delete) operations for managing retailer migrations. All endpoints are asynchronous and include automatic authentication, error handling, and retry logic.
 
 ### Overview
 
+The path prefix (`/v1/`, `/v1.1/`, or `/v2/`) is chosen automatically based on the client's
+`api_version` — see [API Versioning](#api-versioning-migrations) above.
+
 | Operation | Method | Endpoint | Description |
 |-----------|--------|----------|-------------|
-| [List Migrations](#list-migrations) | GET | `/v1/varejista/migracoes` | List migrations with filtering and pagination |
-| [Create Migration](#create-migration) | POST | `/v1/varejista/migracoes` | Create a new migration |
-| [Get Migration](#get-migration) | GET | `/v1/varejista/migracoes/{id}` | Get a specific migration by ID |
-| [Update Migration](#update-migration) | PUT | `/v1/varejista/migracoes/{id}` | Update an existing migration |
-| [Delete Migration](#delete-migration) | DELETE | `/v1/varejista/migracoes/{id}` | Delete a migration |
+| [List Migrations](#list-migrations) | GET | `/{version}/varejista/migracoes` | List migrations with filtering and pagination |
+| [Create Migration](#create-migration) | POST | `/{version}/varejista/migracoes` | Create a new migration |
+| [Get Migration](#get-migration) | GET | `/{version}/varejista/migracoes/{id}` | Get a specific migration by ID |
+| [Update Migration](#update-migration) | PUT | `/{version}/varejista/migracoes/{id}` | Update an existing migration |
+| [Delete Migration](#delete-migration) | DELETE | `/v1/varejista/migracoes/{id}` | Delete a migration (no v1.1/v2 endpoint exists) |
 | [List Contracts](#list-contracts) | GET | `/v1/varejista/contratos` | List retailer contracts with filtering and pagination |
 | [Get Contract](#get-contract) | GET | `/v1/varejista/contratos/{id}` | Get a specific contract by ID |
 | [Create Contract](#create-contract) | POST | `/v1/varejista/contratos` | Create a retailer contract |
@@ -127,8 +178,17 @@ class MigrationListItem:
     comment: str | None
     supplier_agent_code: int | None
     reference_month: datetime
-    denunciation_date: datetime
+    denunciation_date: datetime | None  # absent on v1.1/v2 migrations formalized with the utility
     cer_celebration_id: str | None
+    # V1.1+
+    process_siga_indicator: str | None
+    # V2+ (CP7)
+    protocol_number: str | None
+    intended_utility_month: str | None
+    formalization_date: datetime | None
+    migration_modality: Literal["REGULAR", "ANTECIPADA"] | None
+    consumer_unit_tariff_subgroup: Literal["A2", "A3", "A3a", "A4", "AS", "B1", "B2", "B3", "B4"] | None
+    utility_formalized: Literal["SIM", "NAO"] | None
 ```
 
 ## Contracts Endpoints (🇧🇷 Contratos)
@@ -509,6 +569,63 @@ async def create_migration():
         except Exception as e:
             print(f"❌ Unexpected error: {e}")
 ```
+
+## Create Migration (V2)
+
+When the client resolves to `api_version="v2"` for creates (the default), `create_migration`
+expects a `CreateMigrationRequestV2` instead of `CreateMigrationRequest`.
+
+### Usage
+
+```python
+from voltarium import CreateMigrationRequestV2
+
+async with VoltariumClient(...) as client:  # api_version="v2" by default
+    request = CreateMigrationRequestV2(
+        consumer_unit_code="12345",
+        utility_agent_code=123,
+        document_type="CNPJ",
+        document_number="12345678901234",
+        retailer_agent_code=456,
+        reference_month="2024-01",
+        retailer_profile_code=789,
+        consumer_unit_email="contact@example.com",
+        consumer_unit_tariff_subgroup="A3a",
+        utility_formalized="SIM",
+        formalization_date="2024-01-15",   # required because utility_formalized == "SIM"
+        # migration_modality omitted — forbidden when utility_formalized == "SIM"
+        comment="Migration request comment",
+    )
+
+    migration = await client.create_migration(
+        migration_data=request,
+        agent_code="12345",
+        profile_code="67890"
+    )
+
+    print(f"Created migration: {migration.migration_id}")
+```
+
+### CreateMigrationRequestV2 Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `consumer_unit_code` | `str` | Yes | Consumer unit code |
+| `utility_agent_code` | `int \| str` | Yes | Utility agent code |
+| `document_type` | `Literal["CPF", "CNPJ"]` | Yes | Document type |
+| `document_number` | `str` | Conditional | Required for CNPJ, omit for CPF |
+| `retailer_agent_code` | `int \| str` | Yes | Retailer agent code |
+| `reference_month` | `str` | Yes | Reference month (YYYY-MM format) |
+| `retailer_profile_code` | `int \| str` | Yes | Retailer profile code |
+| `consumer_unit_email` | `str` | Yes | Consumer unit email |
+| `consumer_unit_tariff_subgroup` | `Literal["A2","A3","A3a","A4","AS","B1","B2","B3","B4"]` | Yes | Consumer unit tariff subgroup |
+| `utility_formalized` | `Literal["SIM", "NAO"]` | Yes | Whether formalized with the utility |
+| `formalization_date` | `str` | Conditional | Required (YYYY-MM-DD) when `utility_formalized="SIM"`; must be omitted otherwise |
+| `migration_modality` | `Literal["REGULAR", "ANTECIPADA"]` | Conditional | Required when `utility_formalized="NAO"`; must be omitted otherwise |
+| `comment` | `str` | No | Optional comment |
+
+Note: unlike `CreateMigrationRequest` (v1/v1.1), there is no `denunciation_date` field — CCEE
+replaced it with the `utility_formalized`/`formalization_date`/`migration_modality` workflow above.
 
 ## Get Migration
 

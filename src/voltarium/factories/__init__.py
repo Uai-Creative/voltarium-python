@@ -5,6 +5,7 @@ from .measurements import ListMeasurementsParamsFactory, MeasurementFactory
 from .migration import (
     BaseMigrationFactory,
     CreateMigrationRequestFactory,
+    CreateMigrationRequestV2Factory,
     MigrationItemFactory,
     MigrationListItemFactory,
     UpdateMigrationRequestFactory,
@@ -18,6 +19,7 @@ __all__ = [
     "BaseMigrationFactory",
     "MigrationListItemFactory",
     "CreateMigrationRequestFactory",
+    "CreateMigrationRequestV2Factory",
     "UpdateMigrationRequestFactory",
     "MigrationItemFactory",
     "CreateContractRequestFactory",

@@ -103,9 +103,13 @@ task lint && task format && task typecheck
 
 **Alpha Release** - Core migration endpoints fully supported:
 
-✅ **Retailer Migrations** - Complete CRUD operations
+✅ **Retailer Migrations** - Complete CRUD operations, with V1/V1.1/V2 API version support (`api_version=`, defaults to `"v2"`)
 🚧 **Utility Migrations** - Under development
 📋 **Additional Endpoints** - [See roadmap](https://voltarium.github.io/voltarium-python/staging/#roadmap)
+
+> **1.0.0 note:** `VoltariumClient`'s default `api_version` is now `"v2"` (previously the only
+> option was CCEE's V1 migrations API). Pass `api_version="v1"` to keep the old behavior — see
+> [API Versioning](docs/endpoints.md#api-versioning-migrations).
 
 ## 🤝 Contributing
 
