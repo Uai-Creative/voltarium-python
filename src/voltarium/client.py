@@ -876,7 +876,10 @@ class VoltariumClient:
         """Request supply suspension for a consumer unit due to retailer delinquency (utility-initiated).
 
         Args:
-            request_data: Supply suspension request data
+            request_data: Supply suspension request data. `request_data.utility_agent_code` is
+                optional and defaults to `agent_code` (confirmed against the sandbox: this
+                endpoint is always called by the utility itself, so its own code is already
+                known from `agent_code`/the `codigoAgente` header).
             agent_code: Agent code
             profile_code: Profile code
 
@@ -885,6 +888,7 @@ class VoltariumClient:
         """
         headers_model = ApiHeaders(agent_code=str(agent_code), profile_code=str(profile_code))
         json_data = request_data.model_dump(by_alias=True, exclude_none=True)
+        json_data.setdefault("codigoAgenteConcessionaria", agent_code)
 
         response = await self._request(
             method="POST",
@@ -929,9 +933,9 @@ class VoltariumClient:
         self,
         agent_code: str | int,
         profile_code: str | int,
-        request_status: str,
         request_type: str,
         *,
+        request_status: str | None = None,
         initial_reference_month: str | None = None,
         final_reference_month: str | None = None,
         initial_request_date: str | None = None,
@@ -947,8 +951,10 @@ class VoltariumClient:
         Args:
             agent_code: Agent code
             profile_code: Profile code
-            request_status: Change request status filter (situacaoAlteracao)
-            request_type: Change request type filter (tipoSolicitacao)
+            request_type: Change request type filter (tipoSolicitacao) — required by the API
+            request_status: Optional change request status filter (situacaoAlteracao) —
+                confirmed against the sandbox: unlike `request_type`, omitting this returns
+                requests of every status
             initial_reference_month: Start reference month (YYYY-MM)
             final_reference_month: End reference month (YYYY-MM)
             initial_request_date: Start request date (YYYY-MM-DD)

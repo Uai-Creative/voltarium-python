@@ -149,6 +149,34 @@ async def test_create_supply_suspension_by_utility_requires_concluded_migration(
     assert exc_info.value.code == "ERR_MIGRACAO_CONCLUIDA_NAO_ENCONTRADA"
 
 
+async def test_create_supply_suspension_by_utility_agent_code_defaults_from_client_arg(
+    client: VoltariumClient,
+    retailer: SandboxAgentCredentials,
+    utility: SandboxAgentCredentials,
+) -> None:
+    """Confirmed against the sandbox: omitting codigoAgenteConcessionaria from the body behaves
+    identically to sending the calling agent's own code — the client must auto-fill it from
+    `agent_code`, sparing the caller from passing the same value twice."""
+    migration = await _create_migration(client, retailer, utility)
+
+    request = CreateSupplySuspensionByUtilityRequestFactory.build(
+        consumer_unit_code=migration.consumer_unit_code,
+        utility_agent_code=None,
+    )
+    assert request.utility_agent_code is None
+
+    async with _client_for(utility) as utility_client:
+        with pytest.raises(ValidationError) as exc_info:
+            await utility_client.create_supply_suspension_by_utility(
+                request_data=request,
+                agent_code=utility.agent_code,
+                profile_code=utility.profiles[0],
+            )
+    # Same error the explicit-utility_agent_code test gets — proves the omitted field was
+    # filled in correctly rather than causing a field-validation error.
+    assert exc_info.value.code == "ERR_MIGRACAO_CONCLUIDA_NAO_ENCONTRADA"
+
+
 async def test_update_change_request_status_unknown_id_raises_validation_error(
     client: VoltariumClient,
     retailer: SandboxAgentCredentials,
@@ -179,6 +207,28 @@ async def test_list_change_requests_by_reference_month(
             agent_code=retailer.agent_code,
             profile_code=retailer.profiles[0],
             request_status="CRIADA",
+            request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",
+            initial_reference_month=(now - timedelta(days=300)).strftime("%Y-%m"),
+            final_reference_month=now.strftime("%Y-%m"),
+        )
+    ]
+    for item in results:
+        assert isinstance(item, ChangeRequest)
+
+
+async def test_list_change_requests_request_status_is_optional(
+    client: VoltariumClient,
+    retailer: SandboxAgentCredentials,
+) -> None:
+    """Confirmed against the sandbox: omitting situacaoAlteracao returns 200 with results of
+    every status, unlike tipoSolicitacao (which is genuinely required) — request_status must
+    not be a required parameter."""
+    now = datetime.now()
+    results = [
+        item
+        async for item in client.list_change_requests(
+            agent_code=retailer.agent_code,
+            profile_code=retailer.profiles[0],
             request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",
             initial_reference_month=(now - timedelta(days=300)).strftime("%Y-%m"),
             final_reference_month=now.strftime("%Y-%m"),

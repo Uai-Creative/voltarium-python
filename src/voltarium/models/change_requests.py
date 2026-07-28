@@ -143,13 +143,23 @@ class CreateSupplySuspensionByRetailerRequest(BaseModel):
 
 class CreateSupplySuspensionByUtilityRequest(BaseModel):
     """Request model for a utility to request supply suspension due to retailer delinquency
-    (POST /v1/solicitacoes/suspensao-fornecimento-concessionaria)."""
+    (POST /v1/solicitacoes/suspensao-fornecimento-concessionaria).
+
+    Unlike the other three creation endpoints, this one is always called by the utility
+    itself (its identity is already carried by the `codigoAgente` header / the client
+    method's `agent_code` argument), and the sandbox confirmed `codigoAgenteConcessionaria`
+    in the body is optional: omitting it produces the exact same response as including the
+    calling agent's own code. `utility_agent_code` is therefore optional here — pass it only
+    to override the default (the client fills it in from `agent_code` if omitted).
+    """
 
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     consumer_unit_code: str = Field(serialization_alias="codigoUnidadeConsumidora", description="Consumer unit code")
-    utility_agent_code: int | str = Field(
-        serialization_alias="codigoAgenteConcessionaria", description="Utility agent code"
+    utility_agent_code: int | str | None = Field(
+        default=None,
+        serialization_alias="codigoAgenteConcessionaria",
+        description="Utility agent code (defaults to the calling agent_code if omitted)",
     )
     request_type: Literal["SUSPENSAO_FORNECIMENTO_RESOLUCAO_UC_CONCESSIONARIA"] = Field(
         default="SUSPENSAO_FORNECIMENTO_RESOLUCAO_UC_CONCESSIONARIA",

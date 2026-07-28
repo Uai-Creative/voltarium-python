@@ -91,8 +91,10 @@ class ListChangeRequestsParams(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    request_status: str = Field(serialization_alias="situacaoAlteracao", description="Change request status filter")
     request_type: str = Field(serialization_alias="tipoSolicitacao", description="Change request type filter")
+    request_status: str | None = Field(
+        default=None, serialization_alias="situacaoAlteracao", description="Optional change request status filter"
+    )
     initial_reference_month: str | None = Field(
         default=None, serialization_alias="mesReferenciaInicial", description="Start reference month (YYYY-MM)"
     )

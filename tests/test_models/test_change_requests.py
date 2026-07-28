@@ -12,6 +12,7 @@ from voltarium.models import (
     ChangeRequest,
     CreateReturnToCaptiveRequest,
     CreateSupplySuspensionByRetailerRequest,
+    CreateSupplySuspensionByUtilityRequest,
     UpdateChangeRequestStatusRequest,
 )
 
@@ -135,6 +136,20 @@ def test_create_supply_suspension_by_utility_defaults_request_type() -> None:
     dumped = request.model_dump(by_alias=True, exclude_none=True)
     assert dumped["tipoSolicitacao"] == "SUSPENSAO_FORNECIMENTO_RESOLUCAO_UC_CONCESSIONARIA"
     assert "dataNotificacao" in dumped
+
+
+def test_create_supply_suspension_by_utility_agent_code_is_optional() -> None:
+    """Confirmed against the sandbox: this endpoint is always called by the utility itself, and
+    omitting codigoAgenteConcessionaria produces identical behavior to sending the calling
+    agent's own code — so utility_agent_code must not be required (the client fills it in from
+    agent_code)."""
+    request = CreateSupplySuspensionByUtilityRequest(
+        consumer_unit_code="UC123",
+        notification_date="2024-01-01",
+    )
+    assert request.utility_agent_code is None
+    dumped = request.model_dump(by_alias=True, exclude_none=True)
+    assert "codigoAgenteConcessionaria" not in dumped
 
 
 def test_update_change_request_status_only_accepts_terminal_statuses() -> None:

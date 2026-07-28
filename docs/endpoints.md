@@ -913,8 +913,9 @@ from voltarium import CreateSupplySuspensionByUtilityRequest
 async with VoltariumClient(...) as client:
     request = CreateSupplySuspensionByUtilityRequest(
         consumer_unit_code="UC123456",
-        utility_agent_code=100004,
         notification_date="2024-03-01",
+        # utility_agent_code omitted — this endpoint is always called by the utility itself,
+        # so it defaults to `agent_code` below; pass it explicitly only to override that.
     )
 
     change_request = await client.create_supply_suspension_by_utility(
@@ -926,6 +927,9 @@ async with VoltariumClient(...) as client:
 
 Used by the utility when the retailer becomes delinquent; `request_type` defaults to (and only
 accepts) `SUSPENSAO_FORNECIMENTO_RESOLUCAO_UC_CONCESSIONARIA`. `notification_date` is required.
+`utility_agent_code` is optional — confirmed against the sandbox that omitting
+`codigoAgenteConcessionaria` produces identical behavior to sending the calling agent's own
+code, so `create_supply_suspension_by_utility` fills it in from `agent_code` when not set.
 
 ### Update Change Request Status
 
@@ -960,11 +964,11 @@ async with VoltariumClient(...) as client:
     change_requests = client.list_change_requests(
         agent_code="200001",
         profile_code="200110",
-        request_status="CRIADA",
         request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",
         initial_reference_month="2024-01",
         final_reference_month="2024-12",
-        consumer_unit_code=None,  # optional
+        request_status="CRIADA",       # optional — omit it to match every status
+        consumer_unit_code=None,       # optional
     )
 
     async for change_request in change_requests:
@@ -977,8 +981,8 @@ async with VoltariumClient(...) as client:
 |-----------|------|----------|-------------|
 | `agent_code` | `str \| int` | Yes | Agent code for the request |
 | `profile_code` | `str \| int` | Yes | Profile code for the request |
-| `request_status` | `str` | Yes | Change request status filter (situacaoAlteracao) |
-| `request_type` | `str` | Yes | Change request type filter (tipoSolicitacao) |
+| `request_type` | `str` | Yes | Change request type filter (tipoSolicitacao) — confirmed required by the sandbox |
+| `request_status` | `str` | No | Change request status filter (situacaoAlteracao) — confirmed optional against the sandbox; omitting it returns requests of every status |
 | `initial_reference_month` / `final_reference_month` | `str` | Conditional | Reference month range (YYYY-MM); mutually exclusive with the request-date range |
 | `initial_request_date` / `final_request_date` | `str` | Conditional | Request date range (YYYY-MM-DD); mutually exclusive with the reference-month range |
 | `consumer_unit_code` | `str` | No | Filter by consumer unit code |
