@@ -18,11 +18,17 @@ from voltarium.exceptions import (
 )
 from voltarium.models import (
     ApiHeaders,
+    ChangeRequest,
     Contract,
     ContractFile,
     CreateContractRequest,
     CreateMigrationRequest,
     CreateMigrationRequestV2,
+    CreateRepresentativeChangeRequest,
+    CreateReturnToCaptiveRequest,
+    CreateSupplySuspensionByRetailerRequest,
+    CreateSupplySuspensionByUtilityRequest,
+    ListChangeRequestsParams,
     ListContractsParams,
     ListMeasurementsParams,
     ListMigrationsParams,
@@ -30,6 +36,7 @@ from voltarium.models import (
     MigrationItem,
     MigrationListItem,
     Token,
+    UpdateChangeRequestStatusRequest,
     UpdateMigrationRequest,
 )
 
@@ -117,6 +124,50 @@ def _split_month_range(initial_month: str, final_month: str, max_months: int = 1
         window_end = min(_add_months(cur, max_months - 1), end)
         ranges.append((cur.strftime("%Y-%m"), window_end.strftime("%Y-%m")))
         cur = _add_months(window_end, 1)
+
+    return ranges
+
+
+def _split_date_range(initial_date: str, final_date: str, max_months: int = 12) -> list[tuple[str, str]]:
+    """Split a YYYY-MM-DD date range into chunks spanning at most *max_months* months.
+
+    Mirrors `_split_month_range`, but preserves day-of-month boundaries: the `solicitacoes`
+    list endpoint's `dataSolicitacao` filter (unlike `mesReferencia`) is a full date, not just
+    a year/month pair, yet is subject to the same 12-month-span cap
+    (ERR_MES_REFERENCIA_INICIAL_DIFERENCA).
+
+    Raises:
+        ValueError: if max_months < 1 or initial_date is after final_date.
+    """
+    if max_months < 1:
+        raise ValueError(f"max_months must be >= 1, got {max_months}")
+
+    from calendar import monthrange  # noqa: PLC0415
+    from datetime import date  # noqa: PLC0415
+
+    def _parse(s: str) -> date:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+
+    def _add_months(d: date, n: int) -> date:
+        """Advance a date by n months, clamping the day to the target month's length."""
+        month_index = d.month - 1 + n
+        year = d.year + month_index // 12
+        month = month_index % 12 + 1
+        day = min(d.day, monthrange(year, month)[1])
+        return date(year, month, day)
+
+    start = _parse(initial_date)
+    end = _parse(final_date)
+
+    if start > end:
+        raise ValueError(f"initial_date ({initial_date}) must be <= final_date ({final_date})")
+
+    ranges: list[tuple[str, str]] = []
+    cur = start
+    while cur <= end:
+        window_end = min(_add_months(cur, max_months) - timedelta(days=1), end)
+        ranges.append((cur.strftime("%Y-%m-%d"), window_end.strftime("%Y-%m-%d")))
+        cur = window_end + timedelta(days=1)
 
     return ranges
 
@@ -725,6 +776,249 @@ class VoltariumClient:
 
                 for measurement_data in data.get("medicoes", []):
                     yield Measurement.model_validate(measurement_data)
+
+                page_index = data.get("indexProximaPagina")
+                if page_index is None:
+                    break
+
+    # Change request endpoints (solicitacoes)
+
+    async def create_return_to_captive_request(
+        self,
+        request_data: CreateReturnToCaptiveRequest,
+        agent_code: str | int,
+        profile_code: str | int,
+    ) -> ChangeRequest:
+        """Request a consumer unit's return to the captive market (utility-initiated).
+
+        Args:
+            request_data: Return-to-captive request data
+            agent_code: Agent code
+            profile_code: Profile code
+
+        Returns:
+            Created change request
+        """
+        headers_model = ApiHeaders(agent_code=str(agent_code), profile_code=str(profile_code))
+        json_data = request_data.model_dump(by_alias=True, exclude_none=True)
+
+        response = await self._request(
+            method="POST",
+            path="/v1/solicitacoes/retorno-cativo",
+            headers=headers_model.model_dump(by_alias=True),
+            json=json_data,
+        )
+
+        return ChangeRequest.model_validate(response.json())
+
+    async def create_representative_change_request(
+        self,
+        request_data: CreateRepresentativeChangeRequest,
+        agent_code: str | int,
+        profile_code: str | int,
+    ) -> ChangeRequest:
+        """Request to become a consumer unit's representative (new-retailer-initiated).
+
+        Args:
+            request_data: Representative change request data
+            agent_code: Agent code
+            profile_code: Profile code
+
+        Returns:
+            Created change request
+        """
+        headers_model = ApiHeaders(agent_code=str(agent_code), profile_code=str(profile_code))
+        json_data = request_data.model_dump(by_alias=True, exclude_none=True)
+
+        response = await self._request(
+            method="POST",
+            path="/v1/solicitacoes/representante",
+            headers=headers_model.model_dump(by_alias=True),
+            json=json_data,
+        )
+
+        return ChangeRequest.model_validate(response.json())
+
+    async def create_supply_suspension_by_retailer(
+        self,
+        request_data: CreateSupplySuspensionByRetailerRequest,
+        agent_code: str | int,
+        profile_code: str | int,
+    ) -> ChangeRequest:
+        """Request supply suspension for a consumer unit (retailer-initiated).
+
+        Args:
+            request_data: Supply suspension request data
+            agent_code: Agent code
+            profile_code: Profile code
+
+        Returns:
+            Created change request
+        """
+        headers_model = ApiHeaders(agent_code=str(agent_code), profile_code=str(profile_code))
+        json_data = request_data.model_dump(by_alias=True, exclude_none=True)
+
+        response = await self._request(
+            method="POST",
+            path="/v1/solicitacoes/suspensao-fornecimento-varejista",
+            headers=headers_model.model_dump(by_alias=True),
+            json=json_data,
+        )
+
+        return ChangeRequest.model_validate(response.json())
+
+    async def create_supply_suspension_by_utility(
+        self,
+        request_data: CreateSupplySuspensionByUtilityRequest,
+        agent_code: str | int,
+        profile_code: str | int,
+    ) -> ChangeRequest:
+        """Request supply suspension for a consumer unit due to retailer delinquency (utility-initiated).
+
+        Args:
+            request_data: Supply suspension request data. `request_data.utility_agent_code` is
+                optional and defaults to `agent_code` (confirmed against the sandbox: this
+                endpoint is always called by the utility itself, so its own code is already
+                known from `agent_code`/the `codigoAgente` header).
+            agent_code: Agent code
+            profile_code: Profile code
+
+        Returns:
+            Created change request
+        """
+        headers_model = ApiHeaders(agent_code=str(agent_code), profile_code=str(profile_code))
+        json_data = request_data.model_dump(by_alias=True, exclude_none=True)
+        json_data.setdefault("codigoAgenteConcessionaria", agent_code)
+
+        response = await self._request(
+            method="POST",
+            path="/v1/solicitacoes/suspensao-fornecimento-concessionaria",
+            headers=headers_model.model_dump(by_alias=True),
+            json=json_data,
+        )
+
+        return ChangeRequest.model_validate(response.json())
+
+    async def update_change_request_status(
+        self,
+        change_request_id: str,
+        request_data: UpdateChangeRequestStatusRequest,
+        agent_code: str | int,
+        profile_code: str | int,
+    ) -> ChangeRequest:
+        """Approve or reject a change request (counterparty-initiated).
+
+        Args:
+            change_request_id: Change request ID (idSolicitacaoAlteracao)
+            request_data: Approval/rejection data
+            agent_code: Agent code
+            profile_code: Profile code
+
+        Returns:
+            Updated change request
+        """
+        headers_model = ApiHeaders(agent_code=str(agent_code), profile_code=str(profile_code))
+        json_data = request_data.model_dump(by_alias=True, exclude_none=True)
+
+        response = await self._request(
+            method="POST",
+            path=f"/v1/solicitacoes/{change_request_id}",
+            headers=headers_model.model_dump(by_alias=True),
+            json=json_data,
+        )
+
+        return ChangeRequest.model_validate(response.json())
+
+    async def list_change_requests(
+        self,
+        agent_code: str | int,
+        profile_code: str | int,
+        request_type: str,
+        *,
+        request_status: str | None = None,
+        initial_reference_month: str | None = None,
+        final_reference_month: str | None = None,
+        initial_request_date: str | None = None,
+        final_request_date: str | None = None,
+        consumer_unit_code: str | None = None,
+    ) -> AsyncGenerator[ChangeRequest]:
+        """List change requests (solicitacoes) with filtering and pagination.
+
+        Exactly one of a reference-month range (`initial_reference_month` +
+        `final_reference_month`) or a request-date range (`initial_request_date` +
+        `final_request_date`) must be supplied, per the CCEE API's requirement.
+
+        Args:
+            agent_code: Agent code
+            profile_code: Profile code
+            request_type: Change request type filter (tipoSolicitacao) — required by the API
+            request_status: Optional change request status filter (situacaoAlteracao) —
+                confirmed against the sandbox: unlike `request_type`, omitting this returns
+                requests of every status
+            initial_reference_month: Start reference month (YYYY-MM)
+            final_reference_month: End reference month (YYYY-MM)
+            initial_request_date: Start request date (YYYY-MM-DD)
+            final_request_date: End request date (YYYY-MM-DD)
+            consumer_unit_code: Optional consumer unit code filter
+
+        Returns:
+            AsyncGenerator of change requests
+
+        Raises:
+            ValueError: If neither or both of the two date-range pairs are supplied.
+        """
+        has_month_range = initial_reference_month is not None and final_reference_month is not None
+        has_date_range = initial_request_date is not None and final_request_date is not None
+        if has_month_range == has_date_range:
+            raise ValueError(
+                "list_change_requests requires exactly one of (initial_reference_month, "
+                "final_reference_month) or (initial_request_date, final_request_date)"
+            )
+
+        headers_model = ApiHeaders(
+            agent_code=str(agent_code),
+            profile_code=str(profile_code),
+        )
+
+        if has_month_range:
+            assert initial_reference_month is not None
+            assert final_reference_month is not None
+            windows: list[dict[str, str]] = [
+                {"initial_reference_month": window_start, "final_reference_month": window_end}
+                for window_start, window_end in _split_month_range(initial_reference_month, final_reference_month)
+            ]
+        else:
+            assert initial_request_date is not None
+            assert final_request_date is not None
+            windows = [
+                {"initial_request_date": window_start, "final_request_date": window_end}
+                for window_start, window_end in _split_date_range(initial_request_date, final_request_date)
+            ]
+
+        for window in windows:
+            params_model = ListChangeRequestsParams(
+                request_status=request_status,
+                request_type=request_type,
+                consumer_unit_code=consumer_unit_code,
+                **window,
+            )
+
+            async def _get_page(page_index: str | None = None, _params=params_model) -> Response:
+                _params.next_page_index = page_index
+                return await self._request(
+                    method="GET",
+                    path="/v1/solicitacoes",
+                    headers=headers_model.model_dump(by_alias=True),
+                    params=_params.model_dump(by_alias=True, exclude_none=True),
+                )
+
+            page_index = None
+            while True:
+                response = await _get_page(page_index)
+                data = response.json()
+
+                for item_data in data.get("solicitacao", []):
+                    yield ChangeRequest.model_validate(item_data)
 
                 page_index = data.get("indexProximaPagina")
                 if page_index is None:

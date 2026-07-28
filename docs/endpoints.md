@@ -1,6 +1,6 @@
 # Supported Endpoints
 
-Voltarium currently supports the retailer migration and contracts endpoints of the CCEE API. These endpoints allow you to manage the complete lifecycle of energy retailer migrations and contracts in Brazil.
+Voltarium currently supports the retailer migration, contracts, measurements, and change request (solicitações) endpoints of the CCEE API. These endpoints allow you to manage the complete lifecycle of energy retailer migrations, contracts, and post-migration requests (representative changes, return to captive market, supply suspension) in Brazil.
 
 ## Client Setup
 
@@ -803,6 +803,221 @@ async def delete_migration_safely(migration_id: str):
         except AuthenticationError:
             print("❌ Authentication failed")
 ```
+
+## Change Request Endpoints (🇧🇷 Solicitações)
+
+After a migration is concluded, either party can request further changes: a new retailer can
+request to become the consumer unit's representative (troca de representante), the utility can
+request the consumer unit's return to the captive market (retorno ao cativo), and either the
+retailer or the utility can request supply suspension. The counterparty then approves or rejects
+the request via a single generic endpoint. All change-request endpoints require an already
+`CONCLUIDA` migration for the target consumer unit.
+
+### Overview
+
+| Operation | Method | Endpoint | Description |
+|-----------|--------|----------|-------------|
+| [Create Return-to-Captive Request](#create-return-to-captive-request) | POST | `/v1/solicitacoes/retorno-cativo` | Utility requests a consumer unit's return to the captive market |
+| [Create Representative Change Request](#create-representative-change-request) | POST | `/v1/solicitacoes/representante` | New retailer requests to become the consumer unit's representative |
+| [Create Supply Suspension (Retailer)](#create-supply-suspension-by-retailer) | POST | `/v1/solicitacoes/suspensao-fornecimento-varejista` | Retailer requests supply suspension |
+| [Create Supply Suspension (Utility)](#create-supply-suspension-by-utility) | POST | `/v1/solicitacoes/suspensao-fornecimento-concessionaria` | Utility requests supply suspension (delinquency) |
+| [Update Change Request Status](#update-change-request-status) | POST | `/v1/solicitacoes/{id}` | Counterparty approves or rejects a change request |
+| [List Change Requests](#list-change-requests) | GET | `/v1/solicitacoes` | List/query change requests with filtering and pagination |
+
+### Create Return-to-Captive Request
+
+```python
+from voltarium import CreateReturnToCaptiveRequest
+
+async with VoltariumClient(...) as client:
+    request = CreateReturnToCaptiveRequest(
+        consumer_unit_code="UC123456",
+        reference_month="2024-06",
+        cer_celebration_id="NAO",
+        request_type="ALTERACAO_RETORNO_CATIVO_DESLIGAMENTO",
+    )
+
+    change_request = await client.create_return_to_captive_request(
+        request_data=request,
+        agent_code="100004",   # utility agent code
+        profile_code="100004",
+    )
+
+    print(change_request.change_request_id, change_request.request_status)
+```
+
+`request_type` accepts `ALTERACAO_RETORNO_CATIVO_RESILICAO` (auto-approved after 90 days from
+the reference month if the current retailer doesn't respond), `ALTERACAO_RETORNO_CATIVO_RESOLUCAO`
+(same, 15 days), or `ALTERACAO_RETORNO_CATIVO_DESLIGAMENTO` (auto-approved immediately, for a
+retailer disconnection).
+
+### Create Representative Change Request
+
+```python
+from voltarium import CreateRepresentativeChangeRequest
+
+async with VoltariumClient(...) as client:
+    request = CreateRepresentativeChangeRequest(
+        consumer_unit_code="UC123456",
+        utility_agent_code=100004,
+        new_retailer_agent_code=200001,
+        new_retailer_profile_code=200110,
+        reference_month="2024-06",
+        request_type="ALTERACAO_ALFA_VAREJISTA_RESILICAO",
+    )
+
+    change_request = await client.create_representative_change_request(
+        request_data=request,
+        agent_code="200001",   # new retailer's own agent code
+        profile_code="200110",
+    )
+
+    print(change_request.change_request_id)
+```
+
+`request_type` accepts `ALTERACAO_ALFA_VAREJISTA_RESILICAO` (90-day auto-approval),
+`ALTERACAO_ALFA_VAREJISTA_RESOLUCAO` (15-day auto-approval), or
+`ALTERACAO_ALFA_VAREJISTA_DESLIGAMENTO` (auto-approved, current retailer disconnection).
+
+### Create Supply Suspension (by Retailer)
+
+```python
+from voltarium import CreateSupplySuspensionByRetailerRequest
+
+async with VoltariumClient(...) as client:
+    request = CreateSupplySuspensionByRetailerRequest(
+        consumer_unit_code="UC123456",
+        utility_agent_code=100004,
+        request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",
+        notification_date="2024-03-01",
+    )
+
+    change_request = await client.create_supply_suspension_by_retailer(
+        request_data=request,
+        agent_code="200001",
+        profile_code="200110",
+    )
+```
+
+`request_type` only accepts `SUSPENSAO_FORNECIMENTO_RESILICAO` or
+`SUSPENSAO_FORNECIMENTO_RESOLUCAO` — `SUSPENSAO_FORNECIMENTO_DESLIGAMENTO` is generated
+automatically by CCEE on retailer disconnection and cannot be submitted (confirmed against the
+sandbox: `ERR_TIPO_SOLICITACAO_INVALIDO`). `notification_date` (`YYYY-MM-DD`) is required for
+every submittable type.
+
+### Create Supply Suspension (by Utility)
+
+```python
+from voltarium import CreateSupplySuspensionByUtilityRequest
+
+async with VoltariumClient(...) as client:
+    request = CreateSupplySuspensionByUtilityRequest(
+        consumer_unit_code="UC123456",
+        notification_date="2024-03-01",
+        # utility_agent_code omitted — this endpoint is always called by the utility itself,
+        # so it defaults to `agent_code` below; pass it explicitly only to override that.
+    )
+
+    change_request = await client.create_supply_suspension_by_utility(
+        request_data=request,
+        agent_code="100004",
+        profile_code="100004",
+    )
+```
+
+Used by the utility when the retailer becomes delinquent; `request_type` defaults to (and only
+accepts) `SUSPENSAO_FORNECIMENTO_RESOLUCAO_UC_CONCESSIONARIA`. `notification_date` is required.
+`utility_agent_code` is optional — confirmed against the sandbox that omitting
+`codigoAgenteConcessionaria` produces identical behavior to sending the calling agent's own
+code, so `create_supply_suspension_by_utility` fills it in from `agent_code` when not set.
+
+### Update Change Request Status
+
+Approve or reject a pending change request. Called by the counterparty of whoever created it
+(e.g. the current retailer approves/rejects a representative-change request from a new retailer).
+
+```python
+from voltarium import UpdateChangeRequestStatusRequest
+
+async with VoltariumClient(...) as client:
+    update = UpdateChangeRequestStatusRequest(
+        request_status="CONCLUIDA",   # or "REPROVADA" to reject
+        request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",  # must match the original request
+        justification="Approved after manual review",
+    )
+
+    change_request = await client.update_change_request_status(
+        change_request_id=change_request.change_request_id,
+        request_data=update,
+        agent_code="100004",
+        profile_code="100004",
+    )
+
+    print(change_request.request_status)
+```
+
+### List Change Requests
+
+```python
+async with VoltariumClient(...) as client:
+    # Either a reference-month range OR a request-date range is required (not both, not neither)
+    change_requests = client.list_change_requests(
+        agent_code="200001",
+        profile_code="200110",
+        request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",
+        initial_reference_month="2024-01",
+        final_reference_month="2024-12",
+        request_status="CRIADA",       # optional — omit it to match every status
+        consumer_unit_code=None,       # optional
+    )
+
+    async for change_request in change_requests:
+        print(change_request.change_request_id, change_request.request_status)
+```
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_code` | `str \| int` | Yes | Agent code for the request |
+| `profile_code` | `str \| int` | Yes | Profile code for the request |
+| `request_type` | `str` | Yes | Change request type filter (tipoSolicitacao) — confirmed required by the sandbox |
+| `request_status` | `str` | No | Change request status filter (situacaoAlteracao) — confirmed optional against the sandbox; omitting it returns requests of every status |
+| `initial_reference_month` / `final_reference_month` | `str` | Conditional | Reference month range (YYYY-MM); mutually exclusive with the request-date range |
+| `initial_request_date` / `final_request_date` | `str` | Conditional | Request date range (YYYY-MM-DD); mutually exclusive with the reference-month range |
+| `consumer_unit_code` | `str` | No | Filter by consumer unit code |
+
+Like `list_migrations`/`list_contracts`, ranges spanning more than 12 months are automatically
+split into ≤12-month windows and paginated transparently.
+
+### Response
+
+Every change-request operation returns (or yields, for `list_change_requests`) a `ChangeRequest`:
+
+```python
+class ChangeRequest:
+    change_request_id: str
+    consumer_unit_code: str
+    utility_agent_code: int
+    request_type: str
+    request_status: str
+    request_date: datetime
+    reference_month: datetime | None
+    changed_migration_id: str | None
+    advance_indicator: str | None
+    new_retailer_agent_code: int | None
+    new_retailer_profile_code: int | None
+    current_retailer_agent_code: int | None
+    current_retailer_profile_code: int | None
+    justification: str | None
+    delay_date: str | None
+    notification_date: str | None
+    cer_celebration_id: str | None
+```
+
+Most fields are optional since which ones are populated depends on `request_type` — e.g.
+`new_retailer_agent_code`/`new_retailer_profile_code` are only set for representative-change
+requests.
 
 ## Error Handling
 

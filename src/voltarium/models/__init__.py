@@ -1,6 +1,14 @@
 """Model exports for the Voltarium package."""
 
-from .constants import MigrationStatus, Submarket
+from .change_requests import (
+    ChangeRequest,
+    CreateRepresentativeChangeRequest,
+    CreateReturnToCaptiveRequest,
+    CreateSupplySuspensionByRetailerRequest,
+    CreateSupplySuspensionByUtilityRequest,
+    UpdateChangeRequestStatusRequest,
+)
+from .constants import ChangeRequestStatus, ChangeRequestType, MigrationStatus, Submarket
 from .contracts import (
     Contract,
     ContractFile,
@@ -19,6 +27,7 @@ from .migration import (
 )
 from .requests import (
     ApiHeaders,
+    ListChangeRequestsParams,
     ListContractsParams,
     ListMeasurementsParams,
     ListMigrationsParams,
@@ -28,13 +37,21 @@ from .token import Token
 __all__ = [
     "ApiHeaders",
     "BaseMigration",
+    "ChangeRequest",
+    "ChangeRequestStatus",
+    "ChangeRequestType",
     "Contract",
     "ContractFile",
     "CreateContractRequest",
     "CreateMigrationRequest",
     "CreateMigrationRequestV2",
+    "CreateRepresentativeChangeRequest",
+    "CreateReturnToCaptiveRequest",
+    "CreateSupplySuspensionByRetailerRequest",
+    "CreateSupplySuspensionByUtilityRequest",
     "LegalRepresentative",
     "LegalRepresentativeWrite",
+    "ListChangeRequestsParams",
     "ListContractsParams",
     "ListMeasurementsParams",
     "ListMigrationsParams",
@@ -44,5 +61,6 @@ __all__ = [
     "MigrationStatus",
     "Submarket",
     "Token",
+    "UpdateChangeRequestStatusRequest",
     "UpdateMigrationRequest",
 ]
