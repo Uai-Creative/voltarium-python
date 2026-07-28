@@ -2,7 +2,7 @@
 
 import pytest
 
-from voltarium.client import _split_month_range
+from voltarium.client import VoltariumClient, _split_date_range, _split_month_range
 
 
 def test_same_month():
@@ -59,3 +59,81 @@ def test_inverted_range_raises():
 def test_invalid_max_months_raises():
     with pytest.raises(ValueError, match="max_months"):
         _split_month_range("2024-01", "2024-12", max_months=0)
+
+
+def test_split_date_range_same_day():
+    assert _split_date_range("2024-03-15", "2024-03-15") == [("2024-03-15", "2024-03-15")]
+
+
+def test_split_date_range_within_12_months():
+    result = _split_date_range("2024-01-15", "2024-12-15")
+    assert result == [("2024-01-15", "2024-12-15")]
+
+
+def test_split_date_range_over_12_months_splits():
+    result = _split_date_range("2024-01-15", "2025-06-15")
+    # Every window must span at most 12 months
+    for start, end in result:
+        sy, sm, sd = map(int, start.split("-"))
+        ey, em, ed = map(int, end.split("-"))
+        assert (ey - sy) * 12 + (em - sm) <= 12
+
+    # Must cover the full range with no gaps/overlaps
+    assert result[0][0] == "2024-01-15"
+    assert result[-1][1] == "2025-06-15"
+    for i in range(len(result) - 1):
+        _, window_end = result[i]
+        next_start, _ = result[i + 1]
+        from datetime import date, timedelta
+
+        ey, em, ed = map(int, window_end.split("-"))
+        sy, sm, sd = map(int, next_start.split("-"))
+        assert date(sy, sm, sd) == date(ey, em, ed) + timedelta(days=1)
+
+
+def test_split_date_range_leap_day_clamping():
+    # Adding 12 months from a leap day should clamp to Feb 28 on a non-leap year, not error.
+    result = _split_date_range("2024-02-29", "2024-02-29")
+    assert result == [("2024-02-29", "2024-02-29")]
+
+
+def test_split_date_range_inverted_raises():
+    with pytest.raises(ValueError, match="initial_date"):
+        _split_date_range("2024-06-01", "2024-01-01")
+
+
+def test_split_date_range_invalid_max_months_raises():
+    with pytest.raises(ValueError, match="max_months"):
+        _split_date_range("2024-01-01", "2024-12-31", max_months=0)
+
+
+async def test_list_change_requests_requires_exactly_one_range_pair():
+    # list_change_requests is an async generator: the validation only runs once the
+    # generator is actually iterated, not at call time.
+    client = VoltariumClient(client_id="id", client_secret="secret")
+
+    generator = client.list_change_requests(
+        agent_code="1",
+        profile_code="1",
+        request_status="CRIADA",
+        request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",
+    )
+    with pytest.raises(ValueError, match="exactly one of"):
+        await generator.__anext__()
+
+
+async def test_list_change_requests_rejects_both_range_pairs():
+    client = VoltariumClient(client_id="id", client_secret="secret")
+
+    generator = client.list_change_requests(
+        agent_code="1",
+        profile_code="1",
+        request_status="CRIADA",
+        request_type="SUSPENSAO_FORNECIMENTO_RESILICAO",
+        initial_reference_month="2024-01",
+        final_reference_month="2024-12",
+        initial_request_date="2024-01-01",
+        final_request_date="2024-12-31",
+    )
+    with pytest.raises(ValueError, match="exactly one of"):
+        await generator.__anext__()

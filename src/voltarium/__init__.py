@@ -19,18 +19,25 @@ from voltarium.exceptions import (
     VoltariumError,
 )
 from voltarium.models import (
+    ChangeRequest,
     Contract,
     CreateContractRequest,
     CreateMigrationRequest,
     CreateMigrationRequestV2,
+    CreateRepresentativeChangeRequest,
+    CreateReturnToCaptiveRequest,
+    CreateSupplySuspensionByRetailerRequest,
+    CreateSupplySuspensionByUtilityRequest,
+    ListChangeRequestsParams,
     ListContractsParams,
     ListMigrationsParams,
     MigrationItem,
     MigrationListItem,
     Token,
+    UpdateChangeRequestStatusRequest,
     UpdateMigrationRequest,
 )
-from voltarium.models.constants import MigrationStatus, Submarket
+from voltarium.models.constants import ChangeRequestStatus, ChangeRequestType, MigrationStatus, Submarket
 
 __all__ = [
     # Client
@@ -39,17 +46,26 @@ __all__ = [
     "SANDBOX_BASE_URL",
     "MigrationApiVersion",
     # Models
+    "ChangeRequest",
     "Contract",
     "CreateContractRequest",
     "CreateMigrationRequest",
     "CreateMigrationRequestV2",
+    "CreateRepresentativeChangeRequest",
+    "CreateReturnToCaptiveRequest",
+    "CreateSupplySuspensionByRetailerRequest",
+    "CreateSupplySuspensionByUtilityRequest",
+    "ListChangeRequestsParams",
     "ListContractsParams",
     "ListMigrationsParams",
     "MigrationItem",
     "MigrationListItem",
     "Token",
+    "UpdateChangeRequestStatusRequest",
     "UpdateMigrationRequest",
     # Constants
+    "ChangeRequestStatus",
+    "ChangeRequestType",
     "MigrationStatus",
     "Submarket",
     # Exceptions

@@ -104,6 +104,9 @@ task lint && task format && task typecheck
 **Alpha Release** - Core migration endpoints fully supported:
 
 ✅ **Retailer Migrations** - Complete CRUD operations, with V1/V1.1/V2 API version support (`api_version=`, defaults to `"v2"`)
+✅ **Contracts** - List, get, create, and download signed contract files
+✅ **Measurements** - List consumption measurements with automatic same-month chunking
+✅ **Change Requests (Solicitações)** - Representative changes, return to captive market, supply suspension, and approve/reject workflow
 🚧 **Utility Migrations** - Under development
 📋 **Additional Endpoints** - [See roadmap](https://voltarium.github.io/voltarium-python/staging/#roadmap)
 

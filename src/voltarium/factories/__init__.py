@@ -1,5 +1,13 @@
 """Voltarium factories package."""
 
+from .change_requests import (
+    ChangeRequestFactory,
+    CreateRepresentativeChangeRequestFactory,
+    CreateReturnToCaptiveRequestFactory,
+    CreateSupplySuspensionByRetailerRequestFactory,
+    CreateSupplySuspensionByUtilityRequestFactory,
+    UpdateChangeRequestStatusRequestFactory,
+)
 from .contracts import CreateContractRequestFactory
 from .measurements import ListMeasurementsParamsFactory, MeasurementFactory
 from .migration import (
@@ -23,4 +31,10 @@ __all__ = [
     "UpdateMigrationRequestFactory",
     "MigrationItemFactory",
     "CreateContractRequestFactory",
+    "ChangeRequestFactory",
+    "CreateRepresentativeChangeRequestFactory",
+    "CreateReturnToCaptiveRequestFactory",
+    "CreateSupplySuspensionByRetailerRequestFactory",
+    "CreateSupplySuspensionByUtilityRequestFactory",
+    "UpdateChangeRequestStatusRequestFactory",
 ]

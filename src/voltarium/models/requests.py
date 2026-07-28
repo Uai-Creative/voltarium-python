@@ -84,3 +84,30 @@ class ListMeasurementsParams(BaseModel):
     next_page_index: str | None = Field(
         default=None, serialization_alias="indexProximaPagina", description="Next page index for pagination"
     )
+
+
+class ListChangeRequestsParams(BaseModel):
+    """Query parameters for listing change requests (solicitacoes)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    request_status: str = Field(serialization_alias="situacaoAlteracao", description="Change request status filter")
+    request_type: str = Field(serialization_alias="tipoSolicitacao", description="Change request type filter")
+    initial_reference_month: str | None = Field(
+        default=None, serialization_alias="mesReferenciaInicial", description="Start reference month (YYYY-MM)"
+    )
+    final_reference_month: str | None = Field(
+        default=None, serialization_alias="mesReferenciaFinal", description="End reference month (YYYY-MM)"
+    )
+    initial_request_date: str | None = Field(
+        default=None, serialization_alias="dataSolicitacaoInicial", description="Start request date (YYYY-MM-DD)"
+    )
+    final_request_date: str | None = Field(
+        default=None, serialization_alias="dataSolicitacaoFinal", description="End request date (YYYY-MM-DD)"
+    )
+    consumer_unit_code: str | None = Field(
+        default=None, serialization_alias="codigoUnidadeConsumidora", description="Consumer unit code filter"
+    )
+    next_page_index: str | None = Field(
+        default=None, serialization_alias="indexProximaPagina", description="Next page index for pagination"
+    )
