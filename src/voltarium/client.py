@@ -360,6 +360,17 @@ class VoltariumClient:
             raise ValidationError(code=error_code, message=error_message)
         response.raise_for_status()
 
+    def _parse_page(self, response: Response) -> dict[str, Any]:
+        """Parse a paginated list response body.
+
+        CCEE returns HTTP 204 No Content (empty body) instead of a 200 with an
+        empty array when a list query matches zero results. Treat that the
+        same as an empty page instead of crashing on `response.json()`.
+        """
+        if response.status_code == 204 or not response.content:
+            return {}
+        return response.json()
+
     # Migration endpoints
 
     async def list_migrations(
@@ -411,7 +422,7 @@ class VoltariumClient:
             page_index = None
             while True:
                 response = await _get_page(page_index)
-                data = response.json()
+                data = self._parse_page(response)
 
                 for migration_data in data.get("migracao", []):
                     yield MigrationListItem.model_validate(migration_data)
@@ -611,7 +622,7 @@ class VoltariumClient:
             page_index = None
             while True:
                 response = await _get_page(page_index)
-                data = response.json()
+                data = self._parse_page(response)
 
                 for contract_data in data.get("contratos", data.get("contrato", [])):
                     yield Contract.model_validate(contract_data)
@@ -772,7 +783,7 @@ class VoltariumClient:
             page_index = None
             while True:
                 response = await _get_page(params_model, page_index)
-                data = response.json()
+                data = self._parse_page(response)
 
                 for measurement_data in data.get("medicoes", []):
                     yield Measurement.model_validate(measurement_data)
@@ -1015,7 +1026,7 @@ class VoltariumClient:
             page_index = None
             while True:
                 response = await _get_page(page_index)
-                data = response.json()
+                data = self._parse_page(response)
 
                 for item_data in data.get("solicitacao", []):
                     yield ChangeRequest.model_validate(item_data)
